@@ -151,9 +151,145 @@ window.JCRDBTools = {
         const grupos = [];
         ordem.forEach(cv => String(cv.customId || '').split(',').map(s => s.trim()).filter(Boolean)
             .forEach(g => { if (grupos.indexOf(g) === -1) grupos.push(g); }));
-        r.customId = grupos.join(', ');
+        r.customId = this._idsOrdenados(grupos.join(', '));
+        // periodos por ID: os do vencedor prevalecem sobre os das outras copias
+        const periodos = Object.assign({}, ...ordem.slice().reverse().map(cv => cv.idPeriodos || {}));
+        r.idPeriodos = this._periodosSoDosIds(periodos, r.customId);
+        if (Object.keys(r.idPeriodos).length === 0) delete r.idPeriodos;
         if (ordem.some(cv => cv.inGeneralDb === true)) r.inGeneralDb = true;
         return r;
+    },
+
+    // Periodos nao-"carreira toda" de um CV, embaixo do campo de ID da tabela do
+    // banco: "LAB: 2015–2020". Clicar abre o dialogo para mudar.
+    _periodosDoCvHTML: function (cv) {
+        const ids = String((cv && cv.customId) || '').split(',').map(s => s.trim()).filter(Boolean);
+        return ids.map(id => {
+            const p = this._periodoNoGrupo(cv, id);
+            if (!p) return '';
+            return `<a href="javascript:void(0)" class="custom-id-periodo" data-id="${this._esc(id)}" title="Período de participação no grupo ${this._esc(id)} (clique para mudar)" style="display: inline-block; margin: 2px 4px 0 0; font-size: 0.8em; color: #0D47A1; background: #E3F2FD; border-radius: 8px; padding: 0 6px; text-decoration: none; white-space: nowrap;">${this._esc(id)}: ${this._esc(this._textoPeriodoNoGrupo(p))}</a>`;
+        }).join('');
+    },
+
+    // Pergunta o periodo de participacao num grupo ao atribuir um ID a UM CV. Abre
+    // com "toda a carreira" marcado e o OK em foco: Enter aceita o caso comum. Desmarcar
+    // libera inicio e fim (fim vazio = ate hoje). Resolve com o periodo, ou null para a
+    // carreira toda (Esc e clicar fora tambem).
+    _perguntarPeriodoNoGrupo: function (janela, id, atual) {
+        const doc = janela.document;
+        const anoAtual = new Date().getFullYear();
+        return new Promise((resolve) => {
+            const fundo = doc.createElement('div');
+            fundo.style.cssText = 'position: fixed; inset: 0; z-index: 2147483000; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; font-family: inherit;';
+            fundo.innerHTML = `
+                <form style="background: #fff; color: #333; border-radius: 8px; padding: 16px 18px; width: min(380px, 92vw); box-shadow: 0 8px 30px rgba(0,0,0,0.3); font-size: 14px;">
+                    <h3 style="margin: 0 0 4px; font-size: 1.05em; color: #1565C0;">Período no grupo ${this._esc(id)}</h3>
+                    <div style="color: #777; font-size: 0.85em; margin-bottom: 12px;">O relatório do grupo conta só a produção deste pesquisador dentro do período.</div>
+                    <label style="display: block; cursor: pointer; margin-bottom: 10px;"><input type="checkbox" data-campo="toda"${atual ? '' : ' checked'}> Toda a carreira</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <label>Início <input type="number" data-campo="inicio" min="1950" max="${anoAtual + 1}" placeholder="ano" value="${atual && atual.inicio !== null ? atual.inicio : ''}" style="width: 72px; padding: 3px;"></label>
+                        <label>Fim <input type="number" data-campo="fim" min="1950" max="${anoAtual + 1}" placeholder="hoje" value="${atual && atual.fim !== null ? atual.fim : ''}" style="width: 72px; padding: 3px;"></label>
+                    </div>
+                    <div data-campo="erro" style="color: #C62828; font-size: 0.85em; margin-top: 6px; min-height: 1em;"></div>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                        <button type="submit" data-campo="ok" style="padding: 6px 22px; border: none; background: #1565C0; color: #fff; border-radius: 4px; cursor: pointer; font-weight: bold;">OK</button>
+                    </div>
+                </form>`;
+            doc.body.appendChild(fundo);
+            const campo = (n) => fundo.querySelector(`[data-campo="${n}"]`);
+            const toda = campo('toda'), ini = campo('inicio'), fim = campo('fim'), erro = campo('erro');
+            const ajustar = () => { ini.disabled = fim.disabled = toda.checked; erro.textContent = ''; };
+            ajustar();
+            toda.addEventListener('change', () => { ajustar(); if (!toda.checked) ini.focus(); });
+            const terminar = (valor) => {
+                doc.removeEventListener('keydown', aoTeclar, true);
+                fundo.remove();
+                resolve(valor);
+            };
+            const aoTeclar = (e) => { if (e.key === 'Escape') { e.preventDefault(); terminar(null); } };
+            doc.addEventListener('keydown', aoTeclar, true);
+            fundo.addEventListener('click', (e) => { if (e.target === fundo) terminar(null); });
+            fundo.querySelector('form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (toda.checked) { terminar(null); return; }
+                const a = parseInt(ini.value, 10), b = parseInt(fim.value, 10);
+                const p = { inicio: isNaN(a) ? null : a, fim: isNaN(b) ? null : b };
+                if (p.inicio === null && p.fim === null) { erro.textContent = 'Informe o início, o fim, ou marque toda a carreira.'; ini.focus(); return; }
+                if (p.inicio !== null && p.fim !== null && p.fim < p.inicio) { erro.textContent = 'O fim vem antes do início.'; fim.focus(); return; }
+                terminar(p);
+            });
+            campo('ok').focus();
+        });
+    },
+
+    // ---- Periodo de um pesquisador num grupo (ID) ----
+    // cv.idPeriodos = { 'GRUPO': { inicio: 2015, fim: 2020 } }. Sem entrada para o ID
+    // e a carreira toda, que e quase sempre o caso; por isso o campo so existe para
+    // quem participou do grupo por um tempo. fim null = ate hoje; inicio null = desde
+    // sempre. O relatorio do grupo conta, desse pesquisador, so o que cai no periodo.
+    _periodoNoGrupo: function (cv, id) {
+        const p = cv && cv.idPeriodos && cv.idPeriodos[id];
+        if (!p) return null;
+        const ini = parseInt(p.inicio, 10), fim = parseInt(p.fim, 10);
+        const r = { inicio: isNaN(ini) ? null : ini, fim: isNaN(fim) ? null : fim };
+        if (r.inicio !== null && r.fim !== null && r.fim < r.inicio) [r.inicio, r.fim] = [r.fim, r.inicio];
+        return (r.inicio === null && r.fim === null) ? null : r;
+    },
+
+    // "2015–2020", "desde 2015", "até 2020"; '' para a carreira toda.
+    _textoPeriodoNoGrupo: function (p) {
+        if (!p) return '';
+        if (p.inicio !== null && p.fim !== null) return `${p.inicio}–${p.fim}`;
+        return p.inicio !== null ? `desde ${p.inicio}` : `até ${p.fim}`;
+    },
+
+    // IDs de grupo de um CV sempre em ordem alfabetica e sem repeticao ("A, B, C"),
+    // seja qual for a ordem em que foram atribuidos. Aplicado ao gravar (saveCVs) e
+    // ao mostrar, para registros antigos.
+    _idsOrdenados: function (customId) {
+        const ids = String(customId || '').split(',').map(s => s.trim()).filter(Boolean);
+        return [...new Set(ids)].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true })).join(', ');
+    },
+
+    // So os periodos de IDs que o CV ainda tem (um ID tirado leva o periodo junto).
+    _periodosSoDosIds: function (periodos, customId) {
+        const ids = String(customId || '').split(',').map(s => s.trim()).filter(Boolean);
+        const r = {};
+        Object.keys(periodos || {}).forEach(k => { if (ids.includes(k) && periodos[k]) r[k] = periodos[k]; });
+        return r;
+    },
+
+    // O CV como o grupo `id` o ve: sem periodo, o proprio CV; com periodo, uma copia
+    // so com artigos, patentes, eventos e orientacoes concluidas dentro dele. Itens
+    // sem ano ficam de fora (nao da para saber se caem no periodo), e as orientacoes
+    // em andamento so contam se a participacao vai ate hoje. Indice H e citacoes
+    // declaradas continuam os da carreira, como no resto do relatorio.
+    _cvNoPeriodoDoGrupo: function (cv, id, anoAtual) {
+        const p = this._periodoNoGrupo(cv, id);
+        if (!p) return cv;
+        const atual = Number(anoAtual) || new Date().getFullYear();
+        const dentro = (ano) => {
+            const y = parseInt(ano, 10);
+            return !isNaN(y) && (p.inicio === null || y >= p.inicio) && (p.fim === null || y <= p.fim);
+        };
+        const ativoHoje = p.fim === null || p.fim >= atual;
+        const filtra = (lista) => Array.isArray(lista) ? lista.filter(x => x && dentro(x.year)) : lista;
+        const sup = cv.supervisions || {};
+        const concluded = {};
+        Object.keys(sup.concluded || {}).forEach(k => {
+            const v = sup.concluded[k];
+            concluded[k] = Array.isArray(v) ? v.filter(dentro) : v;
+        });
+        const raw = Array.isArray(sup.raw)
+            ? sup.raw.filter(s => s && (/andamento/i.test(String(s.status || '')) ? ativoHoje : dentro(s.year)))
+            : sup.raw;
+        return Object.assign({}, cv, {
+            publications: filtra(cv.publications || []),
+            rawPatents: filtra(cv.rawPatents),
+            rawEvents: filtra(cv.rawEvents),
+            supervisions: Object.assign({}, sup, { raw, concluded, inCourse: ativoHoje ? (sup.inCourse || {}) : {} }),
+            _periodoNoGrupo: p
+        });
     },
 
     // Ajuste manual: um membro recebeu o ID Lattes `lattesId`. O ID passa a ser o
@@ -744,7 +880,9 @@ window.JCRDBTools = {
                 const v = ind[c.chave];
                 if (c.chave === 'nome') {
                     const lattesLink = cv.lattesId ? `http://lattes.cnpq.br/${this._esc(cv.lattesId)}` : '#';
-                    return `<td style="${td}"><strong><a href="${lattesLink}" target="_blank" style="color: #1565C0; text-decoration: none;">${this._esc(v)}</a></strong></td>`;
+                    // quem participou do grupo so por um tempo mostra o periodo
+                    const periodo = cv._periodoNoGrupo ? ` <span style="font-weight: normal; font-size: 0.8em; color: #666; white-space: nowrap;" title="Período no grupo: só a produção deste intervalo entra no relatório">(${this._esc(this._textoPeriodoNoGrupo(cv._periodoNoGrupo))})</span>` : '';
+                    return `<td style="${td}"><strong><a href="${lattesLink}" target="_blank" style="color: #1565C0; text-decoration: none;">${this._esc(v)}</a></strong>${periodo}</td>`;
                 }
                 if (c.tipo === 'texto' || c.tipo === 'data') {
                     const texto = c.tipo === 'data' && v ? v.toLocaleDateString('pt-BR') : v;
@@ -1793,7 +1931,10 @@ window.JCRDBTools = {
                     // Editar algo nele pelo banco geral — um ID de grupo, por exemplo —
                     // tem de gravar de volta na chave de origem, ou nasceria uma segunda
                     // copia em jcr_cv: que passaria a divergir da que a proposta usa.
-                    if (cv && cv.name) toSet[cv._piccOnlyKey || this._cvStorageKey(cv)] = cv;
+                    if (cv && cv.name) {
+                        if (typeof cv.customId === 'string') cv.customId = this._idsOrdenados(cv.customId);
+                        toSet[cv._piccOnlyKey || this._cvStorageKey(cv)] = cv;
+                    }
                 });
                 if (Object.keys(toSet).length === 0) { resolve(); return; }
                 chrome.storage.local.set(toSet, () => {
@@ -1998,12 +2139,13 @@ window.JCRDBTools = {
                 }
             });
             
-            // Preserve custom ID
+            // Preserve custom ID (e o periodo de cada ID, quando houver)
             if (existing.customId !== undefined) {
                 this.currentCvData.customId = existing.customId;
             } else {
                 this.currentCvData.customId = '';
             }
+            if (existing.idPeriodos) this.currentCvData.idPeriodos = existing.idPeriodos;
         } else {
             if (this.currentCvData.customId === undefined) {
                 this.currentCvData.customId = '';
@@ -2821,9 +2963,10 @@ window.JCRDBTools = {
                     } else if (m.key === 'customId') {
                         tbodyHtml += `<td${classAttr}>
                             <div style="display: flex; gap: 2px;">
-                                <input type="text" class="custom-id-input" data-name="${this._esc(cv.name || '')}" data-lattesid="${this._esc(cv.lattesId || '')}" data-processid="${this._esc(cv.processId || '')}" value="${this._esc(String(val))}" placeholder="ID..." style="width: 100%; min-width: 100px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box;">
-                                <select class="custom-id-select" data-name="${this._esc(cv.name || '')}" data-lattesid="${this._esc(cv.lattesId || '')}" data-processid="${this._esc(cv.processId || '')}" style="width: 24px; border: 1px solid #ccc; border-radius: 3px; background: white;" title="Adicionar ID Existente">${dropdownOptionsHtml}</select>
+                                <input type="text" class="custom-id-input" data-name="${this._esc(cv.name || '')}" data-lattesid="${this._esc(cv.lattesId || '')}" data-processid="${this._esc(cv.processId || '')}" value="${this._esc(this._idsOrdenados(val))}" placeholder="ID..." style="width: 100%; min-width: 100px; padding: 2px 4px; border: 1px solid #ccc; border-radius: 3px; box-sizing: border-box;">
+                                <select class="custom-id-select" data-name="${this._esc(cv.name || '')}" data-lattesid="${this._esc(cv.lattesId || '')}" data-processid="${this._esc(cv.processId || '')}" style="width: 24px; border: 1px solid #ccc; border-radius: 3px; background: white;" title="Adicionar ID existente. Escolher um ID que o CV já tem abre o período de participação nele.">${dropdownOptionsHtml}</select>
                             </div>
+                            <div class="custom-id-periodos">${this._periodosDoCvHTML(cv)}</div>
                         </td>`;
                     } else {
                         tbodyHtml += `<td${classAttr}>${this._esc(String(val))}</td>`;
@@ -2961,31 +3104,79 @@ window.JCRDBTools = {
         const linhaSelecionada = (cv, selected) =>
             selected.some(s => this._mesmoRegistro(cv, s.name, s.lattesId, s.processId));
 
-        const updateCustomId = async (name, lattesId, processId, newValue, inputEl) => {
+        // `periodos` = { ID: periodo | null } para os IDs cujo periodo mudou (null =
+        // carreira toda). IDs retirados perdem o periodo.
+        const updateCustomId = async (name, lattesId, processId, newValue, inputEl, periodos) => {
             const freshDb = await this.getDB(isProcessoOnly);
             const cvIndex = findCvIndex(freshDb, name, lattesId, processId);
             if (cvIndex >= 0) {
-                let finalIds = newValue.split(',').map(s => s.trim()).filter(s => s !== '');
-                const finalValue = finalIds.join(', ');
+                const finalValue = this._idsOrdenados(newValue);
 
-                freshDb[cvIndex].customId = finalValue;
-                await this.saveCVs([freshDb[cvIndex]]);
+                const reg = freshDb[cvIndex];
+                reg.customId = finalValue;
+                const novos = Object.assign({}, reg.idPeriodos || {});
+                Object.keys(periodos || {}).forEach(k => { if (periodos[k]) novos[k] = periodos[k]; else delete novos[k]; });
+                const limpos = this._periodosSoDosIds(novos, finalValue);
+                if (Object.keys(limpos).length > 0) reg.idPeriodos = limpos; else delete reg.idPeriodos;
+                await this.saveCVs([reg]);
                 updateAllDropdowns(freshDb);
 
                 const localIndex = findCvIndex(db, name, lattesId, processId);
-                if (localIndex >= 0) db[localIndex].customId = finalValue;
+                if (localIndex >= 0) {
+                    db[localIndex].customId = finalValue;
+                    if (reg.idPeriodos) db[localIndex].idPeriodos = reg.idPeriodos; else delete db[localIndex].idPeriodos;
+                }
 
-                if (inputEl) inputEl.value = finalValue;
+                if (inputEl) {
+                    inputEl.value = finalValue;
+                    const caixa = inputEl.closest('td') && inputEl.closest('td').querySelector('.custom-id-periodos');
+                    if (caixa) caixa.innerHTML = this._periodosDoCvHTML(reg);
+                }
             }
+        };
+
+        // Pergunta, um por vez, o periodo de cada ID atribuido a esta linha.
+        const perguntarPeriodos = async (registro, ids) => {
+            const r = {};
+            for (const id of ids) r[id] = await this._perguntarPeriodoNoGrupo(newTab, id, this._periodoNoGrupo(registro, id));
+            return r;
+        };
+        const registroDaLinha = (name, lattesId, processId) => {
+            const i = findCvIndex(db, name, lattesId, processId);
+            return i >= 0 ? db[i] : {};
         };
 
         customIdInputs.forEach(input => {
             input.addEventListener('change', async (e) => {
-                const name = e.currentTarget.getAttribute('data-name');
-                const lattesId = e.currentTarget.getAttribute('data-lattesid');
-                const processId = e.currentTarget.getAttribute('data-processid');
-                const newValue = e.currentTarget.value;
-                await updateCustomId(name, lattesId, processId, newValue, e.currentTarget);
+                const el = e.currentTarget;
+                const name = el.getAttribute('data-name');
+                const lattesId = el.getAttribute('data-lattesid');
+                const processId = el.getAttribute('data-processid');
+                const newValue = el.value;
+                const registro = registroDaLinha(name, lattesId, processId);
+                const antes = String(registro.customId || '').split(',').map(s => s.trim()).filter(Boolean);
+                const novos = newValue.split(',').map(s => s.trim()).filter(s => s && !antes.includes(s));
+                const periodos = await perguntarPeriodos(registro, [...new Set(novos)]);
+                await updateCustomId(name, lattesId, processId, newValue, el, periodos);
+            });
+        });
+
+        // Clicar num periodo embaixo do ID reabre o dialogo daquele ID.
+        newTab.document.querySelectorAll('td').forEach(td => {
+            const caixa = td.querySelector('.custom-id-periodos');
+            if (!caixa) return;
+            caixa.addEventListener('click', async (e) => {
+                const alvo = e.target.closest('.custom-id-periodo');
+                if (!alvo) return;
+                e.preventDefault();
+                const inputEl = td.querySelector('.custom-id-input');
+                if (!inputEl) return;
+                const name = inputEl.getAttribute('data-name');
+                const lattesId = inputEl.getAttribute('data-lattesid');
+                const processId = inputEl.getAttribute('data-processid');
+                const id = alvo.getAttribute('data-id');
+                const periodos = await perguntarPeriodos(registroDaLinha(name, lattesId, processId), [id]);
+                await updateCustomId(name, lattesId, processId, inputEl.value, inputEl, periodos);
             });
         });
 
@@ -3007,12 +3198,11 @@ window.JCRDBTools = {
                     let currentVal = inputEl.value;
                     let existingIds = currentVal.split(',').map(s => s.trim()).filter(s => s !== '');
 
-                    if (!existingIds.includes(selectedVal)) {
-                        existingIds.push(selectedVal);
-                        const finalValue = existingIds.join(', ');
-                        inputEl.value = finalValue;
-                        await updateCustomId(name, lattesId, processId, finalValue, inputEl);
-                    }
+                    if (!existingIds.includes(selectedVal)) existingIds.push(selectedVal);
+                    const finalValue = existingIds.join(', ');
+                    inputEl.value = finalValue;
+                    const periodos = await perguntarPeriodos(registroDaLinha(name, lattesId, processId), [selectedVal]);
+                    await updateCustomId(name, lattesId, processId, finalValue, inputEl, periodos);
                 }
             });
         });
@@ -3231,6 +3421,7 @@ window.JCRDBTools = {
                         const cvIndex = findCvIndex(freshDb, name, lattesId, processId);
                         if (cvIndex >= 0) {
                             freshDb[cvIndex].customId = '';
+                            delete freshDb[cvIndex].idPeriodos;
                             modifiedCvs.push(freshDb[cvIndex]);
                         }
                     });
@@ -3315,6 +3506,7 @@ window.JCRDBTools = {
                 const cvIndex = findCvIndex(freshDb, name, lattesId, processId);
                 if (cvIndex >= 0) {
                     freshDb[cvIndex].customId = '';
+                    delete freshDb[cvIndex].idPeriodos;
                     await this.saveCVs([freshDb[cvIndex]]);
                     this.viewDB(newTab, { processOnly: isProcessoOnly });
                 }
@@ -3441,10 +3633,12 @@ window.JCRDBTools = {
                     return;
                 }
             } else {
+                // quem participou do grupo so por um tempo entra com o que fez nele
+                const anoGrupo = new Date().getFullYear();
                 groupCvs = db.filter(cv => {
                     const ids = (cv.customId || '').split(',').map(s => s.trim());
                     return ids.includes(groupId);
-                });
+                }).map(cv => this._cvNoPeriodoDoGrupo(cv, groupId, anoGrupo));
             }
 
             // Ações de ID de grupo (exportar/renomear/limpar/excluir) não se aplicam
@@ -3601,6 +3795,10 @@ window.JCRDBTools = {
                             const index = ids.indexOf(groupId);
                             ids[index] = cleanNewId;
                             cv.customId = [...new Set(ids)].join(', ');
+                            if (cv.idPeriodos && cv.idPeriodos[groupId]) {
+                                cv.idPeriodos[cleanNewId] = cv.idPeriodos[groupId];
+                                delete cv.idPeriodos[groupId];
+                            }
                             modifiedCvs.push(cv);
                         }
                     });
@@ -3623,6 +3821,7 @@ window.JCRDBTools = {
                         if (ids.includes(groupId)) {
                             ids = ids.filter(id => id !== groupId);
                             cv.customId = ids.join(', ');
+                            if (cv.idPeriodos) delete cv.idPeriodos[groupId];
                             modifiedCvs.push(cv);
                         }
                     });
@@ -4830,7 +5029,7 @@ window.JCRDBTools = {
             <div style="background: ${COLORS.backgroundSubHeader}; padding: 15px; border-bottom: 1px solid ${COLORS.border}; margin-bottom: 15px; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <h2 style="margin: 0; color: ${COLORS.footerText};">Relatório: ${this._esc(cvData.name)}</h2>
+                        <h2 style="margin: 0; color: ${COLORS.footerText};">Relatório: ${this._esc(cvData.name)}${cvData._periodoNoGrupo ? ` <span style="font-size: 0.6em; font-weight: normal; color: #666;" title="Aberto a partir do relatório do grupo: só a produção do período de participação">(no grupo: ${this._esc(this._textoPeriodoNoGrupo(cvData._periodoNoGrupo))})</span>` : ''}</h2>
                         <div style="margin-top: 4px; color: #666; font-size: 0.85em;">
                             ${(cvData.name.startsWith('Grupo:') || !cvData.lattesId) ? '' : `ID Lattes: <a href="http://lattes.cnpq.br/${this._esc(cvData.lattesId)}" target="_blank" style="color: #1565C0; text-decoration: none;">${this._esc(cvData.lattesId)}</a> &nbsp;&middot;&nbsp; `}Sincronizado em: ${new Date(cvData.dateAdded).toLocaleDateString()}
                         </div>

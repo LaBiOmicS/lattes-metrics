@@ -25,7 +25,7 @@ Principais Funcionalidades:
 
 2. Gerenciamento e Banco de Dados Local:
 * Banco de Dados de Currículos: Salve múltiplos currículos Lattes localmente no seu navegador para consultas futuras e análises comparativas, com visualização nativa do Índice H e total de citações diretamente na listagem.
-* Consolidação Instantânea de Grupos: Atribua IDs customizados aos currículos para compilar métricas integradas em tempo real. O mesmo campo de ID filtra a tabela do banco: sem currículos marcados, digite ou escolha um ID para ver só os membros daquele grupo.
+* Consolidação Instantânea de Grupos: Atribua IDs customizados aos currículos para compilar métricas integradas em tempo real. O mesmo campo de ID filtra a tabela do banco: sem currículos marcados, digite ou escolha um ID para ver só os membros daquele grupo. Quem participou do grupo só por um tempo pode ter o período (início e fim) registrado ao receber o ID, e o relatório do grupo conta apenas a produção desse intervalo; o padrão é toda a carreira, aceito com um Enter.
 * Relatório de Seleção: Gere o resumo e o relatório consolidado apenas dos currículos marcados na tabela, sem precisar criar um ID de grupo — ideal para análises pontuais.
 * Salvamento Simultâneo Confiável: Cada currículo é armazenado individualmente no banco local. Atualize vários CVs em abas paralelas sem risco de um sobrescrever o outro.
 * Deduplicação Inteligente: O relatório de grupo remove de forma automática artigos, patentes e orientações em coautoria/colaboração repetidos entre os membros, gerando métricas reais e não infladas da produção coletiva.

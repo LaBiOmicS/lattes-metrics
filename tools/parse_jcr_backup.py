@@ -20,7 +20,7 @@ import re
 import textwrap
 import unicodedata
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import combinations
 
 # O formato do JSON e o da extensao (dist/scripts/db_tools.js). Ela exporta tres
@@ -52,6 +52,9 @@ class CVData:
     raw_data: Dict[str, Any]
     # registro so com nome/bolsa/formacao, criado ao importar uma proposta
     skeleton: bool = False
+    # periodo de participacao por ID de grupo (idPeriodos na extensao), so para quem
+    # nao esteve no grupo a carreira toda: {'LAB': {'inicio': 2015, 'fim': 2020}}
+    id_periods: Dict[str, Dict[str, Optional[int]]] = field(default_factory=dict)
 
     @property
     def key(self) -> str:
@@ -117,6 +120,60 @@ def _as_list(v: Any) -> List[Any]:
     return v if isinstance(v, list) else []
 
 
+def _to_year(v: Any) -> Optional[int]:
+    try:
+        return int(str(v).strip()[:4])
+    except (TypeError, ValueError):
+        return None
+
+
+def _id_periods(entry: Dict[str, Any]) -> Dict[str, Dict[str, Optional[int]]]:
+    """idPeriodos da extensao, so dos IDs que o CV ainda tem e com inicio <= fim."""
+    ids = [i.strip() for i in str(entry.get('customId') or '').split(',') if i.strip()]
+    out = {}
+    for gid, p in (entry.get('idPeriodos') or {}).items():
+        if gid not in ids or not isinstance(p, dict):
+            continue
+        ini, fim = _to_year(p.get('inicio')), _to_year(p.get('fim'))
+        if ini is not None and fim is not None and fim < ini:
+            ini, fim = fim, ini
+        if ini is not None or fim is not None:
+            out[gid] = {'inicio': ini, 'fim': fim}
+    return out
+
+
+def period_in_group(cv: 'CVData', group_id: str) -> Optional[Dict[str, Optional[int]]]:
+    """Periodo do pesquisador no grupo (ID, sem diferenca de caixa); None = carreira toda."""
+    for gid, p in cv.id_periods.items():
+        if gid.lower() == str(group_id).lower():
+            return p
+    return None
+
+
+def cv_in_group_period(cv: 'CVData', group_id: str, current_year: Optional[int] = None) -> 'CVData':
+    """O CV como o grupo o ve -- mesma regra de JCRDBTools._cvNoPeriodoDoGrupo: so
+    artigos, patentes, eventos e orientacoes concluidas com ano dentro do periodo;
+    orientacoes em andamento so se a participacao vai ate hoje."""
+    p = period_in_group(cv, group_id)
+    if not p:
+        return cv
+    import datetime
+    atual = current_year or datetime.date.today().year
+    ini, fim = p.get('inicio'), p.get('fim')
+
+    def dentro(item: Any) -> bool:
+        y = _to_year(item.get('year')) if isinstance(item, dict) else None
+        return y is not None and (ini is None or y >= ini) and (fim is None or y <= fim)
+
+    ativo_hoje = fim is None or fim >= atual
+    sups = [s for s in cv.supervisions if isinstance(s, dict) and
+            (ativo_hoje if 'andamento' in str(s.get('status', '')).lower() else dentro(s))]
+    return replace(cv, publications=[x for x in cv.publications if dentro(x)],
+                   patents=[x for x in cv.patents if dentro(x)],
+                   events=[x for x in cv.events if dentro(x)],
+                   supervisions=sups)
+
+
 def load_backup(file_path: str) -> BackupContents:
     """
     Reads any of the extension's JSON exports and separates researchers (CVs)
@@ -170,7 +227,8 @@ def load_backup(file_path: str) -> BackupContents:
         cv = CVData(
             name=name or 'Unknown Researcher',
             lattes_id=lattes_id,
-            custom_id=entry.get('customId') or '',
+            # IDs em ordem alfabetica, como a extensao os grava (JCRDBTools._idsOrdenados)
+            custom_id=', '.join(sorted({i.strip() for i in str(entry.get('customId') or '').split(',') if i.strip()}, key=str.lower)),
             link=link,
             publications=_as_list(entry.get('publications')),
             # 'patents' hoje e o resumo {total, statusCounts}; a lista e rawPatents
@@ -181,6 +239,7 @@ def load_backup(file_path: str) -> BackupContents:
             date_added=entry.get('dateAdded') or 'Unknown Date',
             raw_data=entry,
             skeleton=not _is_full_cv(entry),
+            id_periods=_id_periods(entry),
         )
 
         # A mesma pessoa duas vezes (ex.: backups juntados): fica o CV completo e,
@@ -260,7 +319,8 @@ def generate_network_graph(cvs: List[CVData], output_file: str, zoom: float = 1.
             if cv.custom_id:
                 ids = [i.strip().lower() for i in cv.custom_id.split(',')]
                 if target_custom_id.lower() in ids:
-                    filtered_cvs.append(cv)
+                    # quem esteve no grupo so por um tempo entra com o que fez nele
+                    filtered_cvs.append(cv_in_group_period(cv, target_custom_id))
         print(f"Filtered dataset: {len(filtered_cvs)} researchers match custom ID '{target_custom_id}'")
         cvs = filtered_cvs
 
@@ -477,6 +537,8 @@ def main():
             print(f"  URL: {cv.link}")
             if cv.custom_id:
                 print(f"  Custom ID: {cv.custom_id}")
+            for gid, p in cv.id_periods.items():
+                print(f"  Period in {gid}: {p.get('inicio') or '...'}-{p.get('fim') or 'today'}")
             print(f"  Publications: {len(cv.publications)}")
             print(f"  Patents: {len(cv.patents)}")
             print(f"  Events: {len(cv.events)}")

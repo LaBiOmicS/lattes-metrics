@@ -1390,3 +1390,72 @@ describe('clearDB apaga tambem os blobs das propostas', () => {
         assert.ok(b['jcr_lattes_settings']);
     });
 });
+
+// Periodo de participacao num grupo (ID): so para quem nao e "toda a carreira".
+describe('periodo no grupo', () => {
+    const cv = {
+        name: 'Ana', customId: 'LAB, OUTRO',
+        idPeriodos: { LAB: { inicio: 2015, fim: 2020 } },
+        publications: [{ year: 2014, doi: 'a' }, { year: 2015, doi: 'b' }, { year: 2020, doi: 'c' }, { year: 2021, doi: 'd' }, { doi: 'sem-ano' }],
+        rawPatents: [{ year: 2016 }, { year: 2022 }],
+        supervisions: {
+            concluded: { 'Tese de doutorado': [2013, 2018], 'Dissertação de mestrado': [2019] },
+            inCourse: { 'Tese de doutorado': 1 },
+            raw: [{ status: 'Concluída', year: 2018 }, { status: 'Concluída', year: 2013 }, { status: 'Em andamento' }]
+        }
+    };
+
+    test('sem periodo e a carreira toda: o proprio CV', () => {
+        assert.strictEqual(B._periodoNoGrupo(cv, 'OUTRO'), null);
+        assert.strictEqual(B._cvNoPeriodoDoGrupo(cv, 'OUTRO', 2026), cv);
+    });
+
+    test('com periodo: so o que cai nele, sem itens sem ano', () => {
+        const v = B._cvNoPeriodoDoGrupo(cv, 'LAB', 2026);
+        assert.deepStrictEqual(v.publications.map(p => p.doi), ['b', 'c']);
+        assert.deepStrictEqual(v.rawPatents.map(p => p.year), [2016]);
+        assert.deepStrictEqual(v.supervisions.concluded['Tese de doutorado'], [2018]);
+        assert.deepStrictEqual(v.supervisions.raw.map(s => s.year), [2018]);
+        assert.deepStrictEqual(v.supervisions.inCourse, {});     // saiu antes de hoje
+        assert.strictEqual(cv.publications.length, 5);             // o original fica intacto
+    });
+
+    test('periodo aberto ate hoje mantem as orientacoes em andamento', () => {
+        const aberto = Object.assign({}, cv, { idPeriodos: { LAB: { inicio: 2019, fim: null } } });
+        const v = B._cvNoPeriodoDoGrupo(aberto, 'LAB', 2026);
+        assert.deepStrictEqual(v.publications.map(p => p.doi), ['c', 'd']);
+        assert.deepStrictEqual(v.supervisions.inCourse, { 'Tese de doutorado': 1 });
+        assert.strictEqual(B._textoPeriodoNoGrupo(B._periodoNoGrupo(aberto, 'LAB')), 'desde 2019');
+    });
+
+    test('texto e periodo invertido', () => {
+        assert.strictEqual(B._textoPeriodoNoGrupo({ inicio: 2015, fim: 2020 }), '2015–2020');
+        assert.strictEqual(B._textoPeriodoNoGrupo({ inicio: null, fim: 2020 }), 'até 2020');
+        assert.deepStrictEqual(B._periodoNoGrupo({ idPeriodos: { X: { inicio: 2020, fim: 2015 } } }, 'X'), { inicio: 2015, fim: 2020 });
+    });
+
+    test('ID retirado leva o periodo junto; a mescla de copias soma os periodos', () => {
+        assert.deepStrictEqual(B._periodosSoDosIds({ LAB: { inicio: 2015 }, VELHO: { fim: 2010 } }, 'LAB'), { LAB: { inicio: 2015 } });
+        const m = B._mesclarVersoesCv([
+            { name: 'Ana', hasFullCv: true, dateAdded: '2026-01-02', customId: 'LAB', idPeriodos: { LAB: { inicio: 2015, fim: 2020 } } },
+            { name: 'Ana', hasFullCv: true, dateAdded: '2026-01-01', customId: 'OUTRO', idPeriodos: { OUTRO: { inicio: 2010, fim: null } } }
+        ]);
+        assert.deepStrictEqual(m.idPeriodos, { LAB: { inicio: 2015, fim: 2020 }, OUTRO: { inicio: 2010, fim: null } });
+    });
+});
+
+describe('_idsOrdenados', () => {
+    test('IDs de um CV em ordem alfabetica, sem repeticao nem espacos sobrando', () => {
+        assert.strictEqual(B._idsOrdenados('PPG, LAB,  ALFA ,LAB'), 'ALFA, LAB, PPG');
+        assert.strictEqual(B._idsOrdenados('grupo2, Grupo10, grupo1'), 'grupo1, grupo2, Grupo10');
+        assert.strictEqual(B._idsOrdenados(''), '');
+        assert.strictEqual(B._idsOrdenados(undefined), '');
+    });
+    test('a mescla de copias do mesmo CV sai ordenada', () => {
+        const m = B._mesclarVersoesCv([
+            { name: 'Ana', hasFullCv: true, dateAdded: '2026-01-02', customId: 'ZETA' },
+            { name: 'Ana', hasFullCv: true, dateAdded: '2026-01-01', customId: 'ALFA' }
+        ]);
+        assert.strictEqual(m.customId, 'ALFA, ZETA');
+    });
+});
