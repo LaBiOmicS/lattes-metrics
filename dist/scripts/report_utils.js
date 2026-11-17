@@ -310,11 +310,21 @@ window.JCRReportUtils = {
       countNonGc: 0
     });
 
+    const createQualisObj = () => ({
+      A1: 0, A2: 0, A3: 0, A4: 0,
+      B1: 0, B2: 0, B3: 0, B4: 0,
+      C: 0, NC: 0,
+      totalA: 0,
+      sumPontos: 0
+    });
+    const createQuartilObj = () => ({ Q1: 0, Q2: 0, Q3: 0, Q4: 0, none: 0 });
+    const createMetricObj = () => ({ sum: 0, count: 0 });
+
     const stats = {
-      all: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj() },
-      recent: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj() },
-      last10: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj() },
-      custom: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj() }
+      all: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj(), qualis: createQualisObj(), quartil: createQuartilObj(), sjr: createMetricObj(), citeScore: createMetricObj() },
+      recent: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj(), qualis: createQualisObj(), quartil: createQuartilObj(), sjr: createMetricObj(), citeScore: createMetricObj() },
+      last10: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj(), qualis: createQualisObj(), quartil: createQuartilObj(), sjr: createMetricObj(), citeScore: createMetricObj() },
+      custom: { high: createStatObj(), mid: createStatObj(), low: createStatObj(), noJcr: 0, total: createTotalStatObj(), citations: createCitationObj(), patents: createPatentObj(), events: createEventObj(), qualis: createQualisObj(), quartil: createQuartilObj(), sjr: createMetricObj(), citeScore: createMetricObj() }
     };
 
     let minYear = currentYear;
@@ -387,6 +397,46 @@ window.JCRReportUtils = {
 
           if (pub.wosCitations) periodStats.citations.wos.push(pub.wosCitations);
           if (pub.scopusCitations) periodStats.citations.scopus.push(pub.scopusCitations);
+
+          // Qualis e Quartis
+          const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+            ? window.JCRBibliometrics
+            : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
+
+          const q = String(pub.qualis || 'NC').toUpperCase();
+          if (periodStats.qualis[q] !== undefined) {
+            periodStats.qualis[q]++;
+          } else {
+            periodStats.qualis.NC++;
+          }
+          if (['A1', 'A2', 'A3', 'A4'].includes(q)) {
+            periodStats.qualis.totalA++;
+          }
+          const pontos = pub.qualisPontos || (bio ? bio.qualisPontos(q) : 0);
+          periodStats.qualis.sumPontos += pontos;
+
+          const quart = String(pub.quartil || 'none').toUpperCase();
+          if (['Q1', 'Q2', 'Q3', 'Q4'].includes(quart)) {
+            periodStats.quartil[quart]++;
+          } else {
+            periodStats.quartil.none++;
+          }
+
+          if (pub.sjr) {
+            const vs = parseFloat(pub.sjr);
+            if (!isNaN(vs) && vs > 0) {
+              periodStats.sjr.sum += vs;
+              periodStats.sjr.count++;
+            }
+          }
+
+          if (pub.citeScore) {
+            const vc = parseFloat(pub.citeScore);
+            if (!isNaN(vc) && vc > 0) {
+              periodStats.citeScore.sum += vc;
+              periodStats.citeScore.count++;
+            }
+          }
         };
 
         updateStats(stats.all);
@@ -514,6 +564,142 @@ window.JCRReportUtils = {
         
         <td style="padding: 8px; border-left: 1px solid #eee; text-align: center; background-color: ${bgNone};"><strong>${data.noJcr}</strong></td>
       </tr>
+    `;
+  },
+
+  generateQualisHistogramHTML: function(publications) {
+    const counts = { A1: 0, A2: 0, A3: 0, A4: 0, B1: 0, B2: 0, B3: 0, B4: 0, C: 0, NC: 0 };
+    const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+      ? window.JCRBibliometrics
+      : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
+
+    const pubs = Array.isArray(publications) ? publications : [];
+    pubs.forEach(pub => {
+      const q = String(pub.qualis || 'NC').toUpperCase();
+      if (counts[q] !== undefined) counts[q]++;
+      else counts.NC++;
+    });
+
+    const total = pubs.length;
+    const maxCount = Math.max(1, ...Object.values(counts));
+    const estratos = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C', 'NC'];
+
+    let barsHTML = '';
+    estratos.forEach(e => {
+      const count = counts[e];
+      const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+      const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+      const color = bio ? bio.qualisCor(e) : '#777';
+
+      barsHTML += `
+        <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; flex: 1; min-width: 22px; margin: 0 2px; height: 100%;">
+          <div style="font-size: 0.8em; color: #555; margin-bottom: 3px; font-weight: bold;" title="${count} artigos (${pct}%)">${count > 0 ? count : ''}</div>
+          <div style="width: 85%; background-color: ${color}; height: ${heightPercent}%; min-height: ${count > 0 ? 3 : 0}px; border-radius: 3px 3px 0 0; transition: height 0.3s;" title="Qualis ${e}: ${count} artigos (${pct}%)"></div>
+          <div style="font-size: 0.75em; font-weight: bold; color: ${color}; margin-top: 4px; white-space: nowrap; text-align: center;">${e}</div>
+        </div>
+      `;
+    });
+
+    return `
+      <div style="height: 100%; display: flex; flex-direction: column; padding: 12px 15px; background-color: ${this.COLORS.backgroundSubHeader}; border: 1px solid ${this.COLORS.border}; border-radius: 4px; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-weight: bold; color: ${this.COLORS.footerText};">Distribuição Qualis CAPES</span>
+          <span style="font-size: 0.8em; color: #666;">Total: ${total} artigos</span>
+        </div>
+        <div style="display: flex; align-items: flex-end; height: 130px; border-bottom: 1px solid ${this.COLORS.border}; padding-bottom: 2px;">
+          ${barsHTML}
+        </div>
+      </div>
+    `;
+  },
+
+  generateQuartileHistogramHTML: function(publications) {
+    const counts = { Q1: 0, Q2: 0, Q3: 0, Q4: 0, none: 0 };
+    const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+      ? window.JCRBibliometrics
+      : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
+
+    const pubs = Array.isArray(publications) ? publications : [];
+    pubs.forEach(pub => {
+      const q = String(pub.quartil || 'none').toUpperCase();
+      if (['Q1', 'Q2', 'Q3', 'Q4'].includes(q)) counts[q]++;
+      else counts.none++;
+    });
+
+    const total = pubs.length;
+    const maxCount = Math.max(1, ...Object.values(counts));
+    const labels = [
+      { k: 'Q1', rotulo: 'Q1 (Top 25%)' },
+      { k: 'Q2', rotulo: 'Q2 (25-50%)' },
+      { k: 'Q3', rotulo: 'Q3 (50-75%)' },
+      { k: 'Q4', rotulo: 'Q4 (75-100%)' },
+      { k: 'none', rotulo: 'Sem Quartil' }
+    ];
+
+    let barsHTML = '';
+    labels.forEach(item => {
+      const count = counts[item.k];
+      const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+      const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+      const color = bio ? bio.quartilCor(item.k) : '#777';
+
+      barsHTML += `
+        <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; flex: 1; min-width: 30px; margin: 0 4px; height: 100%;">
+          <div style="font-size: 0.8em; color: #555; margin-bottom: 3px; font-weight: bold;" title="${count} artigos (${pct}%)">${count > 0 ? count : ''}</div>
+          <div style="width: 75%; background-color: ${color}; height: ${heightPercent}%; min-height: ${count > 0 ? 3 : 0}px; border-radius: 3px 3px 0 0; transition: height 0.3s;" title="${item.rotulo}: ${count} artigos (${pct}%)"></div>
+          <div style="font-size: 0.75em; font-weight: bold; color: ${color}; margin-top: 4px; white-space: nowrap; text-align: center;">${item.k === 'none' ? 'S/Q' : item.k}</div>
+        </div>
+      `;
+    });
+
+    return `
+      <div style="height: 100%; display: flex; flex-direction: column; padding: 12px 15px; background-color: ${this.COLORS.backgroundSubHeader}; border: 1px solid ${this.COLORS.border}; border-radius: 4px; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-weight: bold; color: ${this.COLORS.footerText};">Distribuição de Quartis (JCR / SJR)</span>
+          <span style="font-size: 0.8em; color: #666;">Total: ${total} artigos</span>
+        </div>
+        <div style="display: flex; align-items: flex-end; height: 130px; border-bottom: 1px solid ${this.COLORS.border}; padding-bottom: 2px;">
+          ${barsHTML}
+        </div>
+      </div>
+    `;
+  },
+
+  generateExecutiveSummaryHTML: function(stats, totalPubs = 0) {
+    const all = (stats && stats.all) || {};
+    const totalCount = totalPubs || (all.total ? all.total.count : 0);
+    const withJcr = all.total ? all.total.countWithJcr : 0;
+    const avgJcr = withJcr > 0 ? (all.total.sum / withJcr).toFixed(2) : '0.00';
+    const sumJcr = all.total ? all.total.sum.toFixed(1) : '0.0';
+
+    const qualis = all.qualis || { A1: 0, A2: 0, A3: 0, A4: 0, totalA: 0, sumPontos: 0 };
+    const quartil = all.quartil || { Q1: 0, Q2: 0, Q3: 0, Q4: 0 };
+    const pctQ1 = totalCount > 0 ? ((quartil.Q1 / totalCount) * 100).toFixed(1) : '0.0';
+    const pctQualisA = totalCount > 0 ? ((qualis.totalA / totalCount) * 100).toFixed(1) : '0.0';
+    const avgQualisScore = totalCount > 0 ? (qualis.sumPontos / totalCount).toFixed(1) : '0.0';
+
+    const wosCit = all.citations && all.citations.wos ? all.citations.wos.sum : 0;
+    const wosH = all.citations && all.citations.wos ? all.citations.wos.hIndex : 0;
+    const scopusCit = all.citations && all.citations.scopus ? all.citations.scopus.sum : 0;
+    const scopusH = all.citations && all.citations.scopus ? all.citations.scopus.hIndex : 0;
+
+    const card = (label, val, sub, bg, borderCol) => `
+      <div style="flex: 1; min-width: 140px; background: ${bg}; border: 1px solid #ddd; border-left: 4px solid ${borderCol}; border-radius: 4px; padding: 8px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); box-sizing: border-box;">
+        <div style="font-size: 0.72em; text-transform: uppercase; color: #666; font-weight: bold; letter-spacing: 0.5px;">${label}</div>
+        <div style="font-size: 1.35em; font-weight: 900; color: #222; margin: 2px 0;">${val}</div>
+        <div style="font-size: 0.75em; color: #888;">${sub}</div>
+      </div>
+    `;
+
+    return `
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+        ${card('Score CAPES', avgQualisScore, `Total: ${qualis.sumPontos} pts`, '#ffffff', '#006655')}
+        ${card('Quartil Q1', `${pctQ1}%`, `${quartil.Q1} de ${totalCount} artigos`, '#ffffff', '#009988')}
+        ${card('Qualis A (A1-A4)', `${pctQualisA}%`, `${qualis.totalA} artigos A`, '#ffffff', '#0077BB')}
+        ${card('Fator de Impacto', avgJcr, `Média JCR (Σ ${sumJcr})`, '#ffffff', '#EE7733')}
+        ${card('Web of Science', `${wosCit} cit.`, `Índice H: ${wosH}`, '#ffffff', '#33BBEE')}
+        ${card('Scopus', `${scopusCit} cit.`, `Índice H: ${scopusH}`, '#ffffff', '#CC3311')}
+      </div>
     `;
   },
 

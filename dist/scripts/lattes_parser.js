@@ -186,7 +186,16 @@
             authorCount: 0,
             authorRank: -1,
             doi: '',
-            reference: ''
+            reference: '',
+            qualis: 'NC',
+            quartil: 'none',
+            quartilJcr: null,
+            quartilSjr: null,
+            sjr: null,
+            citeScore: null,
+            subarea: '',
+            openAccess: false,
+            qualisPontos: 0
         };
 
         // Texto limpo ANTES de qualquer anotação injetada na página.
@@ -245,6 +254,35 @@
                     if (m) dados.doi = m[1];
                 }
             }
+        }
+
+        // Enriquecimento com inteligência bibliométrica (Qualis, Quartis, SJR, CiteScore)
+        const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+            ? window.JCRBibliometrics
+            : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
+
+        if (bio) {
+            const meta = bio.lookup(dados.issn, dados.journalName);
+            if (meta) {
+                dados.qualis = meta.qualis || 'NC';
+                dados.quartil = meta.quartil || 'none';
+                dados.quartilJcr = meta.quartilJcr || null;
+                dados.quartilSjr = meta.quartilSjr || null;
+                dados.sjr = meta.sjr !== undefined ? meta.sjr : null;
+                dados.citeScore = meta.citeScore !== undefined ? meta.citeScore : null;
+                dados.subarea = meta.subarea || '';
+                dados.openAccess = !!meta.openAccess;
+                if (!dados.impactFactor && meta.jcr) {
+                    dados.impactFactor = String(meta.jcr);
+                    dados.jcrEstimado = true;
+                }
+            } else if (dados.impactFactor) {
+                const est = bio.estimarPorJcr(dados.impactFactor);
+                dados.qualis = est.qualis;
+                dados.quartil = est.quartil;
+                dados.qualisEstimado = est.estimado;
+            }
+            dados.qualisPontos = bio.qualisPontos(dados.qualis);
         }
 
         return dados;

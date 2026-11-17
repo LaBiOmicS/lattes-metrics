@@ -116,6 +116,56 @@ describe('calculateReportStats', () => {
         const vazio = R.calculateReportStats([], [], [], {}, null, 2026, 5, 2022, 2016, 2021, 5, 2);
         assert.strictEqual(vazio.all.total.count, 0);
         assert.strictEqual(vazio.all.noJcr, 0);
+        assert.strictEqual(vazio.all.qualis.sumPontos, 0);
+        assert.strictEqual(vazio.all.quartil.Q1, 0);
+    });
+
+    test('calcula estatisticas de Qualis, Quartis, SJR e CiteScore', () => {
+        const pubsBio = [
+            { year: 2024, jif: 4.5, qualis: 'A1', quartil: 'Q1', sjr: 2.1, citeScore: 5.0 },
+            { year: 2024, jif: 2.0, qualis: 'A3', quartil: 'Q2', sjr: 0.8, citeScore: 2.5 },
+            { year: 2024, jif: 0,   qualis: 'B2', quartil: 'none' }
+        ];
+        const s = R.calculateReportStats(pubsBio, [], [], {}, null, 2026, 5, 2022, 2016, 2021, 5, 2);
+        assert.strictEqual(s.all.qualis.A1, 1);
+        assert.strictEqual(s.all.qualis.A3, 1);
+        assert.strictEqual(s.all.qualis.B2, 1);
+        assert.strictEqual(s.all.qualis.totalA, 2);
+        assert.strictEqual(s.all.qualis.sumPontos, 100 + 70 + 25);
+        assert.strictEqual(s.all.quartil.Q1, 1);
+        assert.strictEqual(s.all.quartil.Q2, 1);
+        assert.strictEqual(s.all.quartil.none, 1);
+        assert.strictEqual(s.all.sjr.count, 2);
+        assert.strictEqual(s.all.citeScore.count, 2);
+    });
+});
+
+describe('histogramas de Qualis e Quartil e Resumo Executivo', () => {
+    const pubs = [
+        { year: 2024, jif: 4.5, qualis: 'A1', quartil: 'Q1' },
+        { year: 2024, jif: 2.0, qualis: 'A3', quartil: 'Q2' }
+    ];
+
+    test('generateQualisHistogramHTML gera barras para A1 e A3', () => {
+        const html = R.generateQualisHistogramHTML(pubs);
+        assert.ok(html.includes('Distribuição Qualis CAPES'));
+        assert.ok(html.includes('Qualis A1'));
+        assert.ok(html.includes('Qualis A3'));
+    });
+
+    test('generateQuartileHistogramHTML gera barras para Q1 e Q2', () => {
+        const html = R.generateQuartileHistogramHTML(pubs);
+        assert.ok(html.includes('Distribuição de Quartis'));
+        assert.ok(html.includes('Q1'));
+        assert.ok(html.includes('Q2'));
+    });
+
+    test('generateExecutiveSummaryHTML gera cards de resumo com Score e % Q1', () => {
+        const s = R.calculateReportStats(pubs, [], [], {}, null, 2026, 5, 2022, 2016, 2021, 5, 2);
+        const html = R.generateExecutiveSummaryHTML(s, 2);
+        assert.ok(html.includes('Score CAPES'));
+        assert.ok(html.includes('Quartil Q1'));
+        assert.ok(html.includes('Qualis A'));
     });
 });
 

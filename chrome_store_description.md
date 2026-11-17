@@ -1,15 +1,15 @@
-JCRLattes - Versão 1.8.7
+Lattes Metrics - Versão 1.9.0
 
 Resumo:
-Injete automaticamente o Fator de Impacto (JCR) em currículos Lattes, gerencie um banco de dados local de pesquisadores, gere relatórios avançados de grupos de pesquisa e analise a produção científica, patentes, autoria e orientações em segundos.
+Injete automaticamente o Fator de Impacto (JCR), Qualis CAPES mais recente, Quartis (Q1–Q4), SCImago (SJR) e CiteScore em currículos Lattes. Centralize métricas acadêmicas, gerencie banco de dados local de pesquisadores, gere relatórios avançados de grupos de pesquisa e analise produção científica, patentes, autoria e orientações em segundos.
 
 --------------------------------------------------
 
 Descrição Detalhada:
 
-O JCRLattes é a ferramenta definitiva para pesquisadores, acadêmicos, coordenadores de pós-graduação e avaliadores que buscam eficiência na análise da Plataforma Lattes. Esta extensão automatiza a extração, anotação e visualização de métricas de impacto e indicadores de autoria diretamente no currículo Lattes (CNPq), transformando dados brutos em inteligência acadêmica instantânea, 100% privada e com design premium.
+O Lattes Metrics (antigo JCRLattes) é a ferramenta definitiva para pesquisadores, acadêmicos, coordenadores de pós-graduação e avaliadores que buscam eficiência na análise da Plataforma Lattes. Esta extensão automatiza a extração, anotação e visualização de métricas de impacto (JCR, Qualis CAPES, Quartis Q1–Q4, SJR, CiteScore) e indicadores de autoria diretamente no currículo Lattes (CNPq), transformando dados brutos em inteligência acadêmica instantânea, 100% privada e com design premium.
 
-Com o JCRLattes, você pode criar e gerenciar um banco de dados local com os currículos de seu laboratório, departamento ou programa de pós-graduação, consolidando métricas coletivas e removendo duplicatas automaticamente.
+Com o Lattes Metrics, você pode criar e gerenciar um banco de dados local com os currículos de seu laboratório, departamento ou programa de pós-graduação, consolidando métricas coletivas e removendo duplicatas automaticamente.
 
 Principais Funcionalidades:
 

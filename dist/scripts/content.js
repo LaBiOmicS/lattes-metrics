@@ -514,13 +514,24 @@ function annotateLattesPage(highJcr, lowJcr, authorNames) {
     pubElem.setAttribute('data-is-last', pubInfo.isLastAuthor);
     pubElem.setAttribute('data-is-gc', pubInfo.hasEtAl);
     pubElem.setAttribute('data-author-rank', pubInfo.authorRank);
+    pubElem.setAttribute('data-qualis', pubInfo.qualis || 'NC');
+    pubElem.setAttribute('data-quartile', pubInfo.quartil || 'none');
+    if (pubInfo.sjr) pubElem.setAttribute('data-sjr', pubInfo.sjr);
+    if (pubInfo.citeScore) pubElem.setAttribute('data-citescore', pubInfo.citeScore);
 
     const pubElemLastItem = pubElem.querySelector('[cvuri]');
     if (pubElemLastItem) {
       injectJournalAnnotation(
         pubElemLastItem,
         pubInfo.issn,
-        { impactFactor: pubInfo.impactFactor, jcrYear: pubInfo.jcrYear },
+        {
+          impactFactor: pubInfo.impactFactor,
+          jcrYear: pubInfo.jcrYear,
+          qualis: pubInfo.qualis,
+          quartil: pubInfo.quartil,
+          sjr: pubInfo.sjr,
+          citeScore: pubInfo.citeScore
+        },
         highJcr,
         lowJcr,
         pubInfo.authorCountStr
@@ -543,24 +554,52 @@ function injectJournalAnnotation(
 ) {
   const annotElem = document.createElement('span');
 
-  let journalAnnot;
+  const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+    ? window.JCRBibliometrics
+    : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
 
+  const badges = [];
+
+  // 1. JCR
   if (!journalInfo.impactFactor) {
-    journalAnnot = ` <b style="color: ${COLORS.noJcr}">Não classificado</b>`;
+    badges.push(`<span style="color: ${COLORS.noJcr}; font-weight: bold; font-size: 11px;">Sem JCR</span>`);
   } else {
     const ifVal = parseFloat(journalInfo.impactFactor);
     let color = COLORS.lowJcr;
     if (ifVal >= highJcr) color = COLORS.highJcr;
     else if (ifVal >= lowJcr) color = COLORS.midJcr;
 
-    journalAnnot = ` <b style="color: ${color}">Fator de Impacto: ${journalInfo.impactFactor}</b>`;
+    badges.push(`<span style="background-color: ${color}; color: #ffffff; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 11px;" title="Fator de Impacto JCR: ${journalInfo.impactFactor}${journalInfo.jcrYear ? ' (' + journalInfo.jcrYear + ')' : ''}">JCR: ${journalInfo.impactFactor}</span>`);
   }
 
+  // 2. Qualis CAPES
+  const q = String(journalInfo.qualis || 'NC').toUpperCase();
+  if (q && q !== 'NC') {
+    const qCor = bio ? bio.qualisCor(q) : '#006655';
+    badges.push(`<span style="background-color: ${qCor}; color: #ffffff; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 11px;" title="Qualis CAPES: ${q}">Qualis ${q}</span>`);
+  }
+
+  // 3. Quartil
+  const quart = String(journalInfo.quartil || 'none').toUpperCase();
+  if (['Q1', 'Q2', 'Q3', 'Q4'].includes(quart)) {
+    const qCor = bio ? bio.quartilCor(quart) : '#0077BB';
+    badges.push(`<span style="background-color: ${qCor}; color: #ffffff; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 11px;" title="Quartil (JCR/SJR): ${quart}">${quart}</span>`);
+  }
+
+  // 4. SJR / CiteScore
+  if (journalInfo.sjr) {
+    badges.push(`<span style="background-color: #546e7a; color: #ffffff; padding: 1px 5px; border-radius: 3px; font-weight: 500; font-size: 10px;" title="SCImago Journal Rank (SJR): ${journalInfo.sjr}">SJR: ${journalInfo.sjr}</span>`);
+  }
+  if (journalInfo.citeScore) {
+    badges.push(`<span style="background-color: #607d8b; color: #ffffff; padding: 1px 5px; border-radius: 3px; font-weight: 500; font-size: 10px;" title="Scopus CiteScore: ${journalInfo.citeScore}">CS: ${journalInfo.citeScore}</span>`);
+  }
+
+  // 5. Autoria
   if (authorCountStr) {
-    journalAnnot += ` <span style="color: ${COLORS.authorCount}; margin-left: 5px; font-weight: bold;">(${authorCountStr})</span>`;
+    badges.push(`<span style="color: ${COLORS.authorCount}; margin-left: 4px; font-weight: bold; font-size: 11px;">(${authorCountStr})</span>`);
   }
 
-  annotElem.innerHTML = journalAnnot;
+  annotElem.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;">${badges.join(' ')}</span>`;
 
   const existingAnnot = elem.parentNode.querySelector('.jcr-lattes-annotation');
   if (existingAnnot) {
@@ -696,13 +735,17 @@ function colunaTabelaCv(chave, rotulo, dica) {
 // recebe o que precisa e devolve HTML. Os quatro graficos vem prontos do
 // report_utils; aqui eles so sao embalados no layout da pagina.
 function montarAreaDeGraficos(togglesHTML, lattesInfo, stats, highJcr, lowJcr) {
+  const executiveSummaryHTML = window.JCRReportUtils.generateExecutiveSummaryHTML(stats, lattesInfo.length);
   const histogramHTML = window.JCRReportUtils.generateHistogramHTML(lattesInfo, highJcr, lowJcr);
   const papersPerYearHTML = window.JCRReportUtils.generatePapersPerYearGraphHTML(lattesInfo, highJcr, lowJcr);
+  const qualisHistogramHTML = window.JCRReportUtils.generateQualisHistogramHTML(lattesInfo);
+  const quartileHistogramHTML = window.JCRReportUtils.generateQuartileHistogramHTML(lattesInfo);
   const authorRankHistogramHTML = window.JCRReportUtils.generateAuthorRankHistogramHTML(lattesInfo, highJcr, lowJcr, true, true);
   const supervisionsPerYearHTML = window.JCRReportUtils.generateSupervisionsPerYearGraphHTML(stats.supervisions);
 
   return `
     <div style="width: 100%;">
+        ${executiveSummaryHTML}
         ${togglesHTML}
     </div>
     <div style="width: 100%; display: flex; flex-direction: column; gap: 10px;" id="graphs-wrapper">
@@ -711,7 +754,7 @@ function montarAreaDeGraficos(togglesHTML, lattesInfo, stats, highJcr, lowJcr) {
           <thead>
             <tr style="background-color: ${COLORS.backgroundHeader}; border-bottom: 1px solid ${COLORS.border};">
               <th style="padding: 8px; text-align: left;">
-                <span class="toggle-table-btn" data-target="graficos" style="cursor: pointer; user-select: none; margin-right: 5px;">${jcrTablesState.graficos ? '[+]' : '[-]'}</span> Gráficos
+                <span class="toggle-table-btn" data-target="graficos" style="cursor: pointer; user-select: none; margin-right: 5px;">${jcrTablesState.graficos ? '[+]' : '[-]'}</span> Gráficos e Inteligência
               </th>
             </tr>
           </thead>
@@ -725,6 +768,14 @@ function montarAreaDeGraficos(togglesHTML, lattesInfo, stats, highJcr, lowJcr) {
                     </div>
                     <div style="flex: 1; min-width: 300px;" id="papers-year-container">
                         ${papersPerYearHTML}
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;" id="qualis-histogram-container">
+                        ${qualisHistogramHTML}
+                    </div>
+                    <div style="flex: 1; min-width: 300px;" id="quartile-histogram-container">
+                        ${quartileHistogramHTML}
                     </div>
                   </div>
                   <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -990,7 +1041,7 @@ function montarPainelDoCv(stats, startYearRecent, startYearLast10, startYearCust
       .jcr-icon-toggle input:checked ~ .jcr-icon-face { filter: grayscale(1); opacity: 0.35; }
     </style>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; padding: 10px; background-color: ${COLORS.backgroundHeader}; border-bottom: 2px solid ${COLORS.border}; border-radius: 4px;">
-      <h2 style="margin: 0; font-size: 1.25em; color: ${COLORS.footerText}; font-weight: bold;">JCR Lattes Report <span id="jcr-report-name" style="color: #326C99; font-weight: 900; margin-left: 5px;">- ${escHtml(nameLink.name)}</span></h2>
+      <h2 style="margin: 0; font-size: 1.25em; color: ${COLORS.footerText}; font-weight: bold;">Lattes Metrics Report <span id="jcr-report-name" style="color: #326C99; font-weight: 900; margin-left: 5px;">- ${escHtml(nameLink.name)}</span></h2>
       <div style="display: flex; gap: 8px; align-items: center;">
         <span id="jcr-db-tools-mount" style="display: inline-flex; gap: 8px; margin-right: 10px;"></span>
         <label class="jcr-icon-toggle" title="Mostrar/Ocultar Tabelas e Gráficos do relatório">
@@ -1095,6 +1146,8 @@ async function injectReportTable(stats, startYearRecent, startYearLast10, startY
     return {
       el: el,
       level: el.getAttribute('data-jcr-level'),
+      qualis: el.getAttribute('data-qualis') || 'NC',
+      quartil: el.getAttribute('data-quartile') || 'none',
       year: yearStr ? parseInt(yearStr) : NaN,
       authorRank: rankStr ? parseInt(rankStr) : -1,
       isFirst: el.getAttribute('data-is-first') === 'true',
@@ -1425,6 +1478,13 @@ async function injectReportTable(stats, startYearRecent, startYearLast10, startY
 
       if (histogramContainer) histogramContainer.innerHTML = window.JCRReportUtils.generateHistogramHTML(filteredLattesInfo, highJcr, lowJcr);
       if (papersYearContainer) papersYearContainer.innerHTML = window.JCRReportUtils.generatePapersPerYearGraphHTML(filteredLattesInfo, highJcr, lowJcr);
+
+      const qualisContainer = document.getElementById('qualis-histogram-container');
+      if (qualisContainer) qualisContainer.innerHTML = window.JCRReportUtils.generateQualisHistogramHTML(filteredLattesInfo);
+
+      const quartileContainer = document.getElementById('quartile-histogram-container');
+      if (quartileContainer) quartileContainer.innerHTML = window.JCRReportUtils.generateQuartileHistogramHTML(filteredLattesInfo);
+
       if (supervisionsYearContainer && stats && stats.supervisions) {
         const rawFiltered = (stats.supervisions.raw || []).filter(item => isNaN(item.year) || item.year >= cutoffYear);
         supervisionsYearContainer.innerHTML = window.JCRReportUtils.generateSupervisionsPerYearGraphHTML(rawFiltered);

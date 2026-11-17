@@ -1,26 +1,27 @@
-# JCRLattes
+# Lattes Metrics (antigo JCRLattes)
 
-**Versão 1.8.7**
+**Versão 1.9.0**
 
-O JCRLattes é a ferramenta definitiva para pesquisadores, acadêmicos, coordenadores de pós-graduação e avaliadores que buscam eficiência na análise da Plataforma Lattes. 
+O **Lattes Metrics** é a central definitiva de inteligência bibliométrica para pesquisadores, acadêmicos, coordenadores de pós-graduação e avaliadores que buscam eficiência na análise da Plataforma Lattes e Plataforma Carlos Chagas. 
 
-Esta extensão automatiza a extração, anotação e visualização de métricas de impacto e indicadores de autoria diretamente no currículo Lattes (CNPq), transformando dados brutos em inteligência acadêmica instantânea, 100% privada e com design premium.
+Esta extensão automatiza a extração, anotação e visualização de métricas de impacto (JCR, Qualis CAPES, Quartis Q1–Q4, SJR, CiteScore) e indicadores de autoria diretamente no currículo Lattes (CNPq), transformando dados brutos em inteligência acadêmica instantânea, 100% privada e com design premium.
 
 O repositório inclui:
-1. **Extensão para Google Chrome (`/dist`)**: Adiciona funcionalidades ao currículo Lattes.
-2. **Leitor do backup JSON (`tools/parse_jcr_backup.py`)**: Módulo Python que lê o backup JSON exportado pela extensão e entrega os currículos prontos para qualquer análise offline. Traz, como exemplo de uso, um gerador de grafo de colaboração.
+1. **Extensão para Google Chrome (`/dist`)**: Adiciona funcionalidades bibliométricas completas ao currículo Lattes e ao efomento/Carlos Chagas.
+2. **Leitor do backup JSON (`tools/parse_jcr_backup.py`)**: Módulo Python que lê o backup JSON exportado pela extensão e entrega os currículos prontos para qualquer análise offline (com sumário de Qualis e Quartis e gerador de grafo de colaboração em rede).
 
 ---
 
 ## 🚀 Principais Funcionalidades (Extensão)
 
-### 1. Métricas de Impacto e Anotação em Tempo Real
-* **Anotação de Fator de Impacto (JCR)**: Exibe o Fator de Impacto (JCR) mais recente e a contagem de autores logo abaixo de cada artigo no próprio currículo Lattes. Cores dinâmicas facilitam a triagem visual, numa paleta padrão legível por daltônicos e personalizável.
-* **Histograma de Distribuição JCR**: Gráfico interativo que revela o perfil de qualidade da sua produção ao longo do tempo.
-* **Métricas de Produção por Ano**: Visualize a evolução da sua carreira com barras empilhadas que mostram o impacto acumulado anualmente.
-* **Segunda Linha de Gráficos**:
-  - **Distribuição por Rank de Autoria**: Histograma da distribuição por posição de autoria (`1º`, `2º`, ...), com colunas especiais para Último Autor (`Ult`) e Grandes Colaborações (`GC`), escala máxima fixada pelo histograma e barras empilhadas de cores JCR proporcionais.
-  - **Orientações por Ano**: Histograma de orientações concluídas de pós-graduação por ano (Pós-doutorado em Verde-azulado, Doutorado em Azul, Mestrado em Laranja), complementado por colunas para Orientações em Andamento (`EA`) com cores fracionadas, Iniciação Científica (`IC`) em Vermelho e Outras Orientações (`Out.`) em Cinza.
+### 1. Métricas de Impacto, Qualis e Anotação Unificada em Tempo Real
+* **Cockpit Analítico / Cards de Resumo Executivo**: No topo do currículo, visualize instantaneamente o Score Ponderado Qualis CAPES, % de artigos no 1º Quartil (Q1), % de artigos Qualis A (A1–A4), Média de Fator de Impacto (JCR), Citações Web of Science e Scopus com seus respectivos Índices H.
+* **Anotação Multifacetada por Artigo**: Badges coloridos acessíveis (paleta amigável para daltônicos) exibindo JCR, Qualis CAPES (A1 a C), Quartil (Q1, Q2, Q3, Q4), SJR (SCImago), CiteScore e contagem/papel de autores.
+* **Histograma Qualis CAPES**: Gráfico dedicado ilustrando a distribuição exata dos artigos pelos estratos A1, A2, A3, A4, B1–B4 e C.
+* **Histograma de Quartis (Q1–Q4)**: Análise visual de excelência por quartil de impacto em periódicos indexados.
+* **Histograma de Distribuição JCR e Produção por Ano**: Gráficos dinâmicos revelando a evolução temporal do impacto.
+* **Distribuição por Rank de Autoria**: Histograma por posição de autoria (`1º`, `2º`, ...), com colunas especiais para Último Autor (`Ult`) e Grandes Colaborações (`GC`).
+* **Orientações por Ano**: Histograma de orientações concluídas de pós-graduação por ano (Pós-doutorado, Doutorado, Mestrado, IC e outras).
 * **Tabelas Estatísticas Dinâmicas**: Tabelas com Somatórios e Médias automáticas para períodos customizados.
 * **Citação e Índice H**: Consolidação automática do Índice H e número de citações para Web of Science e Scopus.
 

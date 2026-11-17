@@ -548,6 +548,21 @@ def main():
             rid_h = cv.raw_data.get('ridHIndex')
             if wos_h is not None or rid_h:
                 print(f"  H-Index -> Lattes (WoS): {wos_h} | RID: {rid_h}")
+
+            # Resumo de Qualis e Quartis das publicações
+            qualis_counts = {}
+            quartil_counts = {}
+            for p in cv.publications:
+                q = (p.get('qualis') or 'NC').upper()
+                qualis_counts[q] = qualis_counts.get(q, 0) + 1
+                qt = (p.get('quartil') or 'none').upper()
+                quartil_counts[qt] = quartil_counts.get(qt, 0) + 1
+            q_list = [f"{k}: {qualis_counts[k]}" for k in ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C'] if k in qualis_counts]
+            if q_list:
+                print(f"  Qualis: {', '.join(q_list)}")
+            qt_list = [f"{k}: {quartil_counts[k]}" for k in ['Q1', 'Q2', 'Q3', 'Q4'] if k in quartil_counts]
+            if qt_list:
+                print(f"  Quartis: {', '.join(qt_list)}")
                 
             print("-" * 50)
             

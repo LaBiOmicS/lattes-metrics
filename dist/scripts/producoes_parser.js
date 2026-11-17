@@ -217,7 +217,7 @@
             if (volume) partes.push('v. ' + volume);
             if (paginaIni) partes.push('p. ' + paginaIni + (paginaFim ? '-' + paginaFim : ''));
 
-            return {
+            const item = {
                 year: ano,
                 issn: rev.issn,
                 journalName: rev.nome,
@@ -240,13 +240,47 @@
                 wosCitations: 0,
                 scopusCitations: 0,
                 doi: doi,
-                qualis: pega(linha, iQualis),
+                qualis: pega(linha, iQualis) || 'NC',
+                quartil: 'none',
+                quartilJcr: null,
+                quartilSjr: null,
+                sjr: null,
+                citeScore: null,
+                subarea: '',
+                openAccess: false,
+                qualisPontos: 0,
                 classificacaoRevista: pega(linha, iClasse),
                 volume: volume,
                 pages: paginaIni + (paginaFim ? '-' + paginaFim : ''),
                 fasciculo: pega(linha, iFasc),
                 reference: partes.join('. ')
             };
+
+            const bio = (typeof window !== 'undefined' && window.JCRBibliometrics)
+                ? window.JCRBibliometrics
+                : (typeof JCRBibliometrics !== 'undefined' ? JCRBibliometrics : null);
+
+            if (bio) {
+                const meta = bio.lookup(item.issn, item.journalName);
+                if (meta) {
+                    if (!item.qualis || item.qualis === 'NC') item.qualis = meta.qualis || 'NC';
+                    item.quartil = meta.quartil || 'none';
+                    item.quartilJcr = meta.quartilJcr || null;
+                    item.quartilSjr = meta.quartilSjr || null;
+                    item.sjr = meta.sjr !== undefined ? meta.sjr : null;
+                    item.citeScore = meta.citeScore !== undefined ? meta.citeScore : null;
+                    item.subarea = meta.subarea || '';
+                    item.openAccess = !!meta.openAccess;
+                    if (!item.jif && meta.jcr) item.jif = meta.jcr;
+                } else if (item.jif) {
+                    const est = bio.estimarPorJcr(item.jif);
+                    if (!item.qualis || item.qualis === 'NC') item.qualis = est.qualis;
+                    item.quartil = est.quartil;
+                }
+                item.qualisPontos = bio.qualisPontos(item.qualis);
+            }
+
+            return item;
         }).filter(p => p.paperTitle || p.journalName);
     }
 
@@ -357,7 +391,8 @@
     }
 
     const CAMPOS_MESCLAVEIS = ['doi', 'issn', 'jif', 'jcrYear', 'authorCount', 'authorRank',
-                               'qualis', 'classificacaoRevista', 'volume', 'pages', 'fasciculo'];
+                               'qualis', 'quartil', 'quartilJcr', 'quartilSjr', 'sjr', 'citeScore',
+                               'subarea', 'qualisPontos', 'classificacaoRevista', 'volume', 'pages', 'fasciculo'];
 
     // Devolve { lista, removidos }: a lista sem repetições (na ordem original) e
     // quantas linhas foram unificadas.
